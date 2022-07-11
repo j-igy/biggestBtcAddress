@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 import ssl
 import requests
+import re
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -15,6 +16,11 @@ resp     = requests.get(url, headers=headers)
 dfTables = pd.read_html(resp.text)
 dfTable  = dfTables[2]
 dfTable  = dfTable.drop(["Block","Balance","Balance, USD @ Price", "Profit"], axis=1)
+dfTable  = dfTable[: dfTable.shape[0]-1 ]
+dfTable.Amount = dfTable.Amount.replace(to_replace =" BTC.*", value = "", regex = True)
+dfTable.Amount = dfTable.Amount.replace(to_replace =",", value = "", regex = True)
+dfTable.Amount = dfTable.Amount.astype(float).round(5)
+dfTable.Time   = pd.to_datetime(dfTable.Time, format="%Y-%m-%d %H:%M:%S UTC")
 
 # dfTable.to_csv("test.csv")
 # print(dfTable)
