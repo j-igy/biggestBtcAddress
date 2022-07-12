@@ -9,15 +9,15 @@ import requests
 class biggestBtcAddress:
 
     def __init__(self, address:str=""):
+        self.__urlPrefix = "https://bitinfocharts.com/"
+        self.__headers   = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
         self.__address   = self.setBtcAddress(address)
         self.__df        = self.getTransactionTable(self.__address)
-        self.__urlPrefix = "https://bitinfocharts.com"
-        self.__headers   = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
     
     def getDf(self):
         return self.__df
     
-    def setBtcAddress(address:str):
+    def setBtcAddress(self, address:str):
         if not address:
             adr = "1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ"
             # TODO: get bigest, non commercial address
@@ -32,7 +32,7 @@ class biggestBtcAddress:
         # ssl._create_default_https_context = ssl._create_unverified_context
         
         # Request page
-        url      = self.__urlPrefix + "/bitcoin/address/" + address
+        url      = self.__urlPrefix + "bitcoin/address/" + address
         resp     = requests.get(url, headers=self.__headers)
 
         # Convert html table to the list of pandas DFs
@@ -62,7 +62,7 @@ class biggestBtcAddress:
         # self.__df = self.__df[3:].reset_index(drop=True)
 
         # Get the newest table 
-        newDf   = self.getTransactionTable()
+        newDf   = self.getTransactionTable(self.__address)
 
         # Select new row
         dfDelta = pd.concat([newDf, self.__df])
@@ -75,8 +75,9 @@ class biggestBtcAddress:
         return dfDelta
 
 
-addres = biggestBtcAddress("1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ")
-deltaDf = addres.checkChanges(5)
+
+address = biggestBtcAddress("1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ")
+deltaDf = address.checkChanges(5)
 if not deltaDf.empty:
     deltaDf = deltaDf.to_string(index=False)
     print((deltaDf))
