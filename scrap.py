@@ -8,21 +8,32 @@ import requests
 # from bitinfocharts.com page
 class biggestBtcAddress:
 
-    def __init__(self, address:str):
-        self.urlPrefix = "https://bitinfocharts.com/bitcoin/address/"
-        self.address   = address
-        self.df        = self.getTransactionTable()
+    def __init__(self, address:str=""):
+        self.__address   = self.setBtcAddress(address)
+        self.__df        = self.getTransactionTable(self.__address)
+        self.__urlPrefix = "https://bitinfocharts.com"
+        self.__headers   = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
     
+    def getDf(self):
+        return self.__df
+    
+    def setBtcAddress(address:str):
+        if not address:
+            adr = "1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ"
+            # TODO: get bigest, non commercial address
+        else:
+            adr = address
+        return adr
+
     # Get a table with the last operations from the page
-    def getTransactionTable(self):
+    def getTransactionTable(self, address):
     
         # Create a https context
         # ssl._create_default_https_context = ssl._create_unverified_context
         
         # Request page
-        url      = self.urlPrefix + self.address
-        headers  = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
-        resp     = requests.get(url, headers=headers)
+        url      = self.__urlPrefix + "/bitcoin/address/" + address
+        resp     = requests.get(url, headers=self.__headers)
 
         # Convert html table to the list of pandas DFs
         dfTables = pd.read_html(resp.text)
@@ -48,21 +59,21 @@ class biggestBtcAddress:
     # Update the table, return new position in the table as DF
     def checkChanges(self, greaterThan:float=0.0 ):
         # Symulation of the new data
-        # self.df = self.df[3:].reset_index(drop=True)
+        # self.__df = self.__df[3:].reset_index(drop=True)
 
         # Get the newest table 
         newDf   = self.getTransactionTable()
 
         # Select new row
-        dfDelta = pd.concat([newDf, self.df])
+        dfDelta = pd.concat([newDf, self.__df])
         dfDelta = dfDelta.drop_duplicates(keep=False, ignore_index=True)
         dfDelta = dfDelta[dfDelta.Amount > greaterThan]
 
         # update dataframe
-        self.df = newDf
+        self.__df = newDf
 
         return dfDelta
-        
+
 
 addres = biggestBtcAddress("1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ")
 deltaDf = addres.checkChanges(5)
