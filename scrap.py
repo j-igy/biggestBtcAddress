@@ -1,7 +1,10 @@
+from asyncio.windows_events import NULL
 from cmath import nan
+from statistics import mode
 import pandas as pd
-import ssl
+import ssl, json, re
 import requests
+from utility import logging, saveObjToFile, saveToFile
 
 
 # get block-chain info about the biggest 
@@ -9,80 +12,104 @@ import requests
 # from bitinfocharts.com page
 class biggestBtcAddress:
 
-    def __init__(self, address:str="", onlyPrivate:bool=True):
-        self.__urlPrefix   = "https://bitinfocharts.com/"
-        self.__headers     = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
-        self.__onlyPrivAdr = onlyPrivate
-        self.__address     = self.setBtcAddress(address)
-        self.__df          = self.getTransactionTable(self.__address)
-    
-    def getDf(self):
-        return self.__df
-    
-    def setBtcAddress(self, address:str):
-            return self.getTop100(True).Address[0] if not address else address
+    def __init__(self, addresses:list=NULL, onlyPrivate:bool=True):
+        self.log = logging("biggestBtcAddress")
+        self.log.INFO()
+        self.__urlPrefix         = "https://bitinfocharts.com/"
+        self.__adrsBalances:dict = self.getBalanceForThis(addresses) if addresses else self.getTop100(onlyPrivate)
+        self.__image:dict        = self.getTransactionTablesFor(self.__adrsBalances)
 
-    # Get a table with the last operations from the page
-    def getTransactionTable(self, address):
+    def getImage(self):
+        return self.__image
+
+    def getAddressesBalances(self):
+        return self.__adrsBalances
+
+    def saveImageToFile(self, fileName="Image.csv"):
+        self.log.INFO()
+        saveToFile("", fileName, mode="w")
+        for x in self.__image:
+            saveToFile(x, fileName, mode="a")
+            self.__image[x].to_csv( fileName, mode="a")
+
+    def getBalanceForThis(self, addresses:list) -> dict:
+        self.log.INFO()
+        balance = {}
+        for adr in addresses:
+            self.log.INFO(adr)
+            transactions, balance[adr] = self.getTransactionTableFor(adr) 
+        return balance
+
+    def getBalance(self, adr):
+        self.log.INFO()
+        return 20.9
+
+    def getTransactionTablesFor(self, addresses:dict):
+        self.log.INFO()
+        transactions = {}
+        for adr in addresses:
+            self.log.INFO(adr)
+            transactions[adr], balance = self.getTransactionTableFor(adr)
+        return transactions
+
+    # Get tables from webpage
+    def getTablesFromHtml(self, url) -> list: 
+        self.log.INFO()
     
         # Create a https context
         # ssl._create_default_https_context = ssl._create_unverified_context
         
         # Request page
-        url      = self.__urlPrefix + "bitcoin/address/" + address
-        resp     = requests.get(url, headers=self.__headers)
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
+        url     = self.__urlPrefix + url
+        resp    = requests.get(url, headers=headers)
 
-        # Convert html table to the list of pandas DFs
-        dfTables = pd.read_html(resp.text)
+        # Return the converted html table to the list of pandas DFs
+        return pd.read_html(resp.text)
+
+
+    # Get a table with the last operations from the page
+    def getTransactionTableFor(self, address) -> pd.DataFrame: 
+        self.log.INFO()
 
         # From the list of DFs, get the third DF - it contains the necessary data
-        dfTable  = dfTables[2]
+        dfTables = self.getTablesFromHtml("bitcoin/address/" + address)
+        transactions = dfTables[2]
 
         # Remove unnecessary columns and row
-        dfTable  = dfTable.drop(["Block","Balance","Balance, USD @ Price", "Profit"], axis=1)
-        dfTable  = dfTable[: dfTable.shape[0]-1 ]
+        transactions = transactions.drop(["Block","Balance","Balance, USD @ Price", "Profit"], axis=1)
+        transactions = transactions[: transactions.shape[0]-1 ]
 
         # convert the "Amont" col to float type
-        dfTable.Amount = dfTable.Amount.replace(to_replace =" BTC.*", value = "", regex = True)
-        dfTable.Amount = dfTable.Amount.replace(to_replace =",", value = "", regex = True)
-        dfTable.Amount = dfTable.Amount.astype(float).round(5)
+        transactions.Amount = transactions.Amount.replace(to_replace =" BTC.*", value = "", regex = True)
+        transactions.Amount = transactions.Amount.replace(to_replace =",", value = "", regex = True)
+        transactions.Amount = transactions.Amount.astype(float).round(5)
 
         # convert the "Time" col to float type
-        dfTable.Time   = pd.to_datetime(dfTable.Time, format="%Y-%m-%d %H:%M:%S UTC")
+        transactions.Time   = pd.to_datetime(transactions.Time, format="%Y-%m-%d %H:%M:%S UTC")
 
-        return dfTable
+        balance = dfTables[1][0][0]
+        balance = re.sub(" BTC.*", "", balance)
+        balance = re.sub("Balance: ", "", balance)
+        balance = re.sub("[\.].*", "", balance)
+        balance = re.sub(",", "", balance)
+        balance = float(balance)
+
+        return transactions, balance
 
 
     # Update the table, return new position in the table as DF
-    def checkChanges(self, greaterThan:float=0.0 ):
-        # Symulation of the new data
-        # self.__df = self.__df[3:].reset_index(drop=True)
-
-        # Get the newest table 
-        newDf   = self.getTransactionTable(self.__address)
-
-        # Select new row
-        dfDelta = pd.concat([newDf, self.__df])
-        dfDelta = dfDelta.drop_duplicates(keep=False, ignore_index=True)
-        dfDelta = dfDelta[dfDelta.Amount > greaterThan]
-
-        # update dataframe
-        self.__df = newDf
-
-        return dfDelta
+    def checkChanges(self):
+        self.log.INFO()
+        # newAdrsBalances = self.getBalanceForThis(self.__adrsBalances)
 
     # Get a table with the last operations from the page
-    def getTop100(self, onlyPrivate:bool=False):
-    
-        # Create a https context
-        # ssl._create_default_https_context = ssl._create_unverified_context
-        
-        # Request page
-        url      = self.__urlPrefix + "top-100-richest-bitcoin-addresses.html"
-        resp     = requests.get(url, headers=self.__headers)
+    def getTop100(self, onlyPrivate:bool=False, pageNo=1) -> dict:
+        self.log.INFO()
 
-        # Convert html table to the list of pandas DFs
-        dfTables = pd.read_html(resp.text)
+        # Get html tables from page as list of pandas DFs
+        url = ("top-100-richest-bitcoin-addresses-%d.html" % pageNo)
+        dfTables = self.getTablesFromHtml(url)
 
         # Get table from the list of DFs
         dfTable = []
@@ -109,22 +136,25 @@ class biggestBtcAddress:
         dfTable.Balance = dfTable.Balance.astype(float).round(1)
         
         # drop institutional address
-        if self.__onlyPrivAdr: 
+        if onlyPrivate: 
             dfTable = dfTable.fillna(0)
             dfTable = dfTable[dfTable["Info"] == 0]
             dfTable = dfTable.reset_index()
+        
+        # convert to dict
+        dfTable = dfTable.set_index("Address")
+        dfTable = dfTable.drop(["pos", "Info"], axis=1)
+        addressBalances = dfTable.to_dict()["Balance"]
 
-        return dfTable
+        return addressBalances
+
+adrs = ["1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ", "bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt", "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF"]
+address = biggestBtcAddress(adrs)
+
+saveObjToFile("test.json", address.getAddressesBalances())
+address.saveImageToFile()
 
 
-address = biggestBtcAddress()
-df = address.getDf()
-df.to_csv("test.csv")
-
-deltaDf = address.checkChanges(5)
-if not deltaDf.empty:
-    deltaDf = deltaDf.to_string(index=False)
-    print((deltaDf))
 
 
 
